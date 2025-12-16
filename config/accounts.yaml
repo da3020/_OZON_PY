@@ -1,0 +1,10 @@
+accounts:
+  - name: fenix
+    client_id_env: OZON_FENIX_CLIENT_ID
+    api_key_env: OZON_FENIX_API_KEY
+  - name: pchel
+    client_id_env: OZON_PCHEL_CLIENT_ID
+    api_key_env: OZON_PCHEL_API_KEY
+  - name: skorovar
+    client_id_env: OZON_SKOROVAR_CLIENT_ID
+    api_key_env: OZON_SKOROVAR_API_KEY

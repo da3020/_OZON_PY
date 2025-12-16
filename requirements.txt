@@ -1,0 +1,6 @@
+requests
+pandas
+jinja2
+python-dotenv
+PyYAML
+openpyxl
