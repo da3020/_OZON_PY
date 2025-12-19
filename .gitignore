@@ -1,24 +1,35 @@
+# -----------------------------
 # Python
+# -----------------------------
 __pycache__/
 *.pyc
+*.pyo
 
-# venv
+# -----------------------------
+# Virtual environments
+# -----------------------------
 .venv/
 venv/
 
-# env
+# -----------------------------
+# Environment / secrets
+# -----------------------------
 .env
 
-# cache / reports
+# -----------------------------
+# Runtime data
+# -----------------------------
 cache/
 reports/
 
-# IDE
-.vscode/
+# -----------------------------
+# Server runtime logs
+# -----------------------------
+server/api/logs/
 
-# OS
+# -----------------------------
+# IDE / OS
+# -----------------------------
+.vscode/
 .DS_Store
 Thumbs.db
-
-# server runtime logs
-server/api/logs/
