@@ -13,12 +13,6 @@ from utils.html_report import save_html_report
 
 
 # -----------------------------
-# CONFIG
-# -----------------------------
-BATCH_ENDPOINT = "https://ozon.chdesign.ru/api/production_batch_create.php"
-
-
-# -----------------------------
 # LOADERS
 # -----------------------------
 def load_accounts():
@@ -42,10 +36,10 @@ def map_category_name(category_id, category_map, default_name):
 # -----------------------------
 # SERVER COMMUNICATION
 # -----------------------------
-def send_batch_to_server(payload: dict):
+def send_batch_to_server(batch_endpoint: str, payload: dict):
     try:
         response = requests.post(
-            BATCH_ENDPOINT,
+            batch_endpoint,
             json=payload,
             timeout=20,
         )
@@ -66,6 +60,10 @@ def send_batch_to_server(payload: dict):
 # -----------------------------
 def main():
     load_dotenv()
+
+    batch_endpoint = os.getenv("PRODUCTION_BATCH_CREATE_URL")
+    if not batch_endpoint:
+        raise RuntimeError("Не задан PRODUCTION_BATCH_CREATE_URL в .env")
 
     accounts = load_accounts()
     category_map, default_category = load_category_config()
@@ -90,7 +88,7 @@ def main():
         postings = ozon_client.get_unfulfilled()
         print(f"Получено заказов: {len(postings)}")
 
-        # Собираем offer_id
+        # Собираем offer_id для обновления кэша категорий
         offer_ids = set()
         for p in postings:
             for item in p.get("products", []):
@@ -171,7 +169,7 @@ def main():
         "items": batch_items,
     }
 
-    send_batch_to_server(batch_payload)
+    send_batch_to_server(batch_endpoint, batch_payload)
 
 
 if __name__ == "__main__":
