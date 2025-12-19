@@ -19,3 +19,6 @@ reports/
 # OS
 .DS_Store
 Thumbs.db
+
+# server runtime logs
+server/api/logs/
