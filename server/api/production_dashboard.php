@@ -7,16 +7,19 @@ header('Content-Type: text/html; charset=utf-8');
  */
 
 // -----------------------------
-// CONFIG
+// LOAD CONFIG
 // -----------------------------
-$apiBase = __DIR__;
-$getBatchUrl = 'production_batch_get.php';
-$listBatchUrl = 'production_batch_list.php';
+$config = require __DIR__ . '/config.php';
+$apiBaseUrl = $config['api_base_url'];
+
+// endpoints
+$listBatchUrl = $apiBaseUrl . '/production_batch_list.php';
+$getBatchUrl  = $apiBaseUrl . '/production_batch_get.php';
 
 // -----------------------------
 // GET LAST BATCH
 // -----------------------------
-$listJson = @file_get_contents($apiBase . '/' . $listBatchUrl);
+$listJson = @file_get_contents($listBatchUrl);
 if ($listJson === false) {
     die('Ошибка: не удалось получить список batch');
 }
@@ -32,7 +35,7 @@ $lastBatchId = $listData['batches'][0]['batch_id'];
 // GET BATCH DATA
 // -----------------------------
 $batchJson = @file_get_contents(
-    $apiBase . '/' . $getBatchUrl . '?batch_id=' . urlencode($lastBatchId)
+    $getBatchUrl . '?batch_id=' . urlencode($lastBatchId)
 );
 
 if ($batchJson === false) {
@@ -40,13 +43,13 @@ if ($batchJson === false) {
 }
 
 $batchData = json_decode($batchJson, true);
-if (!$batchData || $batchData['status'] !== 'ok') {
+if (!$batchData || ($batchData['status'] ?? '') !== 'ok') {
     die('Ошибка данных batch');
 }
 
-$batch = $batchData['batch'];
+$batch   = $batchData['batch'];
 $summary = $batchData['summary'];
-$items = $batchData['items'];
+$items   = $batchData['items'];
 
 // -----------------------------
 // GROUP ITEMS BY CATEGORY
@@ -55,9 +58,6 @@ $byCategory = [];
 
 foreach ($items as $item) {
     $cat = $item['category'] ?? 'Иное';
-    if (!isset($byCategory[$cat])) {
-        $byCategory[$cat] = [];
-    }
     $byCategory[$cat][] = $item;
 }
 ?>
