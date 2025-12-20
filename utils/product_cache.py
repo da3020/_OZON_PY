@@ -1,6 +1,6 @@
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone, timedelta
 
 CACHE_DIR = "cache"
 CACHE_FILE = os.path.join(CACHE_DIR, "product_categories.json")
@@ -11,10 +11,18 @@ def _utcnow():
     return datetime.now(timezone.utc)
 
 
-def load_cache():
+def load_cache() -> dict:
     """
-    Загружает кэш из файла.
-    Возвращает dict с ключами: meta, data
+    Возвращает словарь:
+    {
+        "meta": {...},
+        "data": {
+            "offer_id": {
+                "category_id": int,
+                "updated_at": iso
+            }
+        }
+    }
     """
     if not os.path.exists(CACHE_FILE):
         return {
@@ -30,18 +38,12 @@ def load_cache():
 
 
 def save_cache(cache: dict):
-    """
-    Сохраняет кэш в файл
-    """
     os.makedirs(CACHE_DIR, exist_ok=True)
     with open(CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(cache, f, ensure_ascii=False, indent=2)
 
 
 def is_cache_expired(cache: dict) -> bool:
-    """
-    Проверяет, истёк ли TTL у кэша
-    """
     created_at = cache.get("meta", {}).get("created_at")
     if not created_at:
         return True
@@ -52,28 +54,30 @@ def is_cache_expired(cache: dict) -> bool:
     return _utcnow() - created_dt > ttl
 
 
-def get_cached_categories(cache: dict) -> dict:
+def update_category_cache(new_categories: dict):
     """
-    Возвращает словарь:
-    { offer_id: category_id }
+    new_categories:
+    { offer_id (str): category_id (int) }
     """
-    result = {}
-    for offer_id, info in cache.get("data", {}).items():
-        result[offer_id] = info.get("category_id")
-    return result
-
-
-def update_cache(cache: dict, new_categories: dict):
-    """
-    new_categories: { offer_id: category_id }
-    """
+    cache = load_cache()
     now = _utcnow().isoformat()
 
     for offer_id, category_id in new_categories.items():
-        cache.setdefault("data", {})[offer_id] = {
+        cache.setdefault("data", {})[str(offer_id)] = {
             "category_id": category_id,
             "updated_at": now
         }
 
     cache["meta"]["created_at"] = now
     cache["meta"]["ttl_hours"] = TTL_HOURS
+
+    save_cache(cache)
+
+
+def get_category_id_by_offer_id(offer_id: str):
+    cache = load_cache()
+    item = cache.get("data", {}).get(str(offer_id))
+    if not item:
+        print(f"⚠️ Категория не найдена в кэше: {offer_id}")
+        return None
+    return item.get("category_id")

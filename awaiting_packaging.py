@@ -1,6 +1,5 @@
 import os
 import yaml
-import json
 import pandas as pd
 import requests
 
@@ -11,6 +10,10 @@ from ozon_client import OzonClient
 from ozon_product_client import OzonProductClient
 
 from utils.html_report import save_html_report
+from utils.product_cache import (
+    update_category_cache,
+    get_category_id_by_offer_id,
+)
 
 
 # -----------------------------
@@ -38,14 +41,11 @@ def map_category_name(category_id, category_map, default_name):
 # SERVER COMMUNICATION
 # -----------------------------
 def send_batch_to_server(batch_endpoint: str, payload: dict):
-    try:
-        response = requests.post(
-            batch_endpoint,
-            json=payload,
-            timeout=20,
-        )
-    except Exception as e:
-        raise RuntimeError(f"Ошибка соединения с сервером: {e}")
+    response = requests.post(
+        batch_endpoint,
+        json=payload,
+        timeout=20,
+    )
 
     if response.status_code != 200:
         raise RuntimeError(
@@ -89,7 +89,9 @@ def main():
         postings = ozon_client.get_unfulfilled()
         print(f"Получено заказов: {len(postings)}")
 
-        # Собираем offer_id для обновления кэша категорий
+        # -----------------------------
+        # UPDATE CATEGORY CACHE
+        # -----------------------------
         offer_ids = set()
         for p in postings:
             for item in p.get("products", []):
@@ -98,15 +100,19 @@ def main():
 
         if offer_ids:
             print(f"Обновление кэша категорий ({len(offer_ids)} товаров)")
-            product_client.get_categories_by_offer_ids(list(offer_ids))
+            categories = product_client.get_categories_by_offer_ids(list(offer_ids))
+            update_category_cache(categories)
 
+        # -----------------------------
+        # PROCESS ORDERS
+        # -----------------------------
         for p in postings:
             products = p.get("products", [])
             order_date = p.get("in_process_at")
 
             items_str = ", ".join(
                 f"{item.get('offer_id')} "
-                f"({map_category_name(item.get('description_category_id'), category_map, default_category)}) "
+                f"({map_category_name(get_category_id_by_offer_id(item.get('offer_id')), category_map, default_category)}) "
                 f"x{item.get('quantity')}"
                 for item in products
             )
@@ -121,9 +127,7 @@ def main():
             )
 
             for item in products:
-                # Временный safeguard — можно оставить
-                if item.get("description_category_id") is None:
-                    print("⚠️ Нет description_category_id:", item)
+                category_id = get_category_id_by_offer_id(item.get("offer_id"))
 
                 batch_items.append(
                     {
@@ -132,7 +136,7 @@ def main():
                         "offer_id": item.get("offer_id"),
                         "quantity": item.get("quantity"),
                         "category": map_category_name(
-                            item.get("description_category_id"),
+                            category_id,
                             category_map,
                             default_category,
                         ),
@@ -140,7 +144,7 @@ def main():
                 )
 
     # -----------------------------
-    # DATAFRAME OUTPUT
+    # OUTPUT
     # -----------------------------
     df = pd.DataFrame(all_rows)
 
@@ -166,7 +170,7 @@ def main():
     print(f"Excel-отчёт сохранён: {excel_path}")
 
     # -----------------------------
-    # SEND BATCH TO SERVER
+    # SEND BATCH
     # -----------------------------
     batch_payload = {
         "batch_created_at": batch_created_at,
