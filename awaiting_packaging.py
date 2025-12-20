@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 from ozon_client import OzonClient
 from ozon_product_client import OzonProductClient
+
 from utils.html_report import save_html_report
 
 
@@ -105,7 +106,7 @@ def main():
 
             items_str = ", ".join(
                 f"{item.get('offer_id')} "
-                f"({map_category_name(item.get('category_id'), category_map, default_category)}) "
+                f"({map_category_name(item.get('description_category_id'), category_map, default_category)}) "
                 f"x{item.get('quantity')}"
                 for item in products
             )
@@ -120,6 +121,10 @@ def main():
             )
 
             for item in products:
+                # Временный safeguard — можно оставить
+                if item.get("description_category_id") is None:
+                    print("⚠️ Нет description_category_id:", item)
+
                 batch_items.append(
                     {
                         "account": acc["name"],
@@ -127,7 +132,7 @@ def main():
                         "offer_id": item.get("offer_id"),
                         "quantity": item.get("quantity"),
                         "category": map_category_name(
-                            item.get("category_id"),
+                            item.get("description_category_id"),
                             category_map,
                             default_category,
                         ),
