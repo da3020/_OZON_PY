@@ -1,59 +1,59 @@
 <?php
 header('Content-Type: text/html; charset=utf-8');
 
-/**
- * Production Dashboard
- * Read-only HTML panel
- */
+/*
+|--------------------------------------------------------------------------
+| Production Dashboard
+|--------------------------------------------------------------------------
+| batch_id:
+|  - если передан → открываем конкретный batch
+|  - если нет → берём последний batch
+|--------------------------------------------------------------------------
+*/
 
-// -----------------------------
-// LOAD CONFIG
-// -----------------------------
-$config = require __DIR__ . '/config.php';
-$apiBaseUrl = $config['api_base_url'];
+$batchId = $_GET['batch_id'] ?? null;
 
-// endpoints
-$listBatchUrl = $apiBaseUrl . '/production_batch_list.php';
-$getBatchUrl  = $apiBaseUrl . '/production_batch_get.php';
+$batchDir = __DIR__ . '/logs';
+$batchFile = null;
 
-// -----------------------------
-// GET LAST BATCH
-// -----------------------------
-$listJson = @file_get_contents($listBatchUrl);
-if ($listJson === false) {
-    die('Ошибка: не удалось получить список batch');
+// --------------------------------------------------
+// Если batch_id передан — используем его
+// --------------------------------------------------
+if ($batchId) {
+    $candidate = $batchDir . '/batch_' . basename($batchId) . '.json';
+    if (!file_exists($candidate)) {
+        die('Batch не найден: ' . htmlspecialchars($batchId));
+    }
+    $batchFile = $candidate;
 }
 
-$listData = json_decode($listJson, true);
-if (!$listData || empty($listData['batches'])) {
-    die('Нет batch данных');
+// --------------------------------------------------
+// Если batch_id НЕ передан — берём последний batch
+// --------------------------------------------------
+if (!$batchFile) {
+    $files = glob($batchDir . '/batch_*.json');
+    if (!$files) {
+        die('Нет доступных batch');
+    }
+
+    rsort($files, SORT_STRING); // самый новый — первый
+    $batchFile = $files[0];
 }
 
-$lastBatchId = $listData['batches'][0]['batch_id'];
-
-// -----------------------------
-// GET BATCH DATA
-// -----------------------------
-$batchJson = @file_get_contents(
-    $getBatchUrl . '?batch_id=' . urlencode($lastBatchId)
-);
-
-if ($batchJson === false) {
-    die('Ошибка: не удалось загрузить batch');
+// --------------------------------------------------
+// Загружаем batch
+// --------------------------------------------------
+$batchData = json_decode(file_get_contents($batchFile), true);
+if (!$batchData) {
+    die('Ошибка чтения batch');
 }
 
-$batchData = json_decode($batchJson, true);
-if (!$batchData || ($batchData['status'] ?? '') !== 'ok') {
-    die('Ошибка данных batch');
-}
+$batchId   = $batchData['batch_id'];
+$items     = $batchData['items'] ?? [];
 
-$batch   = $batchData['batch'];
-$summary = $batchData['summary'];
-$items   = $batchData['items'];
-
-// -----------------------------
-// GROUP ITEMS BY CATEGORY
-// -----------------------------
+// --------------------------------------------------
+// Группировка по категориям
+// --------------------------------------------------
 $byCategory = [];
 
 foreach ($items as $item) {
@@ -65,27 +65,18 @@ foreach ($items as $item) {
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Производство — текущий batch</title>
+<title>Производство — batch <?= htmlspecialchars($batchId) ?></title>
 <style>
 body {
     font-family: Arial, sans-serif;
-    margin: 20px;
     background: #f7f7f7;
-}
-h1, h2 {
-    margin-bottom: 10px;
+    margin: 20px;
 }
 .block {
     background: #fff;
     padding: 15px;
     margin-bottom: 20px;
     border-radius: 6px;
-}
-.category {
-    margin-bottom: 15px;
-}
-.category h3 {
-    margin-bottom: 5px;
 }
 table {
     width: 100%;
@@ -94,62 +85,49 @@ table {
 th, td {
     padding: 6px 8px;
     border-bottom: 1px solid #ddd;
-    text-align: left;
 }
 th {
     background: #eee;
 }
 .small {
-    color: #666;
     font-size: 13px;
+    color: #666;
 }
 </style>
 </head>
 <body>
 
-<h1>Производство — текущий batch</h1>
+<h1>Производственный batch</h1>
 
 <div class="block">
-    <strong>Batch ID:</strong> <?= htmlspecialchars($batch['batch_id']) ?><br>
-    <strong>Создан:</strong> <?= htmlspecialchars($batch['batch_created_at']) ?><br>
-    <strong>Заказов:</strong> <?= (int)$batch['total_orders'] ?><br>
-    <strong>Позиций:</strong> <?= (int)$batch['items_count'] ?>
+    <strong>Batch ID:</strong> <?= htmlspecialchars($batchId) ?><br>
+    <strong>Создан:</strong> <?= htmlspecialchars($batchData['batch_created_at']) ?><br>
+    <strong>Заказов:</strong> <?= (int)$batchData['total_orders'] ?><br>
+    <strong>Статус:</strong> <?= htmlspecialchars($batchData['status']) ?>
 </div>
 
+<?php foreach ($byCategory as $cat => $rows): ?>
 <div class="block">
-    <h2>Сводка по категориям</h2>
-    <?php foreach ($summary['by_category'] as $cat => $qty): ?>
-        <div><?= htmlspecialchars($cat) ?> — <strong><?= (int)$qty ?></strong></div>
-    <?php endforeach; ?>
+    <h2><?= htmlspecialchars($cat) ?></h2>
+    <table>
+        <tr>
+            <th>Offer</th>
+            <th>Кол-во</th>
+            <th>Аккаунт</th>
+        </tr>
+        <?php foreach ($rows as $row): ?>
+        <tr>
+            <td><?= htmlspecialchars($row['offer_id']) ?></td>
+            <td><?= (int)$row['quantity'] ?></td>
+            <td><?= htmlspecialchars($row['account']) ?></td>
+        </tr>
+        <?php endforeach; ?>
+    </table>
 </div>
-
-<div class="block">
-    <h2>Что делать сегодня</h2>
-
-    <?php foreach ($byCategory as $cat => $rows): ?>
-        <div class="category">
-            <h3><?= htmlspecialchars($cat) ?></h3>
-            <table>
-                <tr>
-                    <th>Offer</th>
-                    <th>Кол-во</th>
-                    <th>Аккаунт</th>
-                </tr>
-                <?php foreach ($rows as $row): ?>
-                <tr>
-                    <td><?= htmlspecialchars($row['offer_id']) ?></td>
-                    <td><?= (int)$row['quantity'] ?></td>
-                    <td><?= htmlspecialchars($row['account']) ?></td>
-                </tr>
-                <?php endforeach; ?>
-            </table>
-        </div>
-    <?php endforeach; ?>
-
-</div>
+<?php endforeach; ?>
 
 <div class="small">
-    Обновляется автоматически при новом batch
+    <div>Открыт файл: <?= basename($batchFile) ?></div>
 </div>
 
 </body>

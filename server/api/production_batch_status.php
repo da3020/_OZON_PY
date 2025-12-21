@@ -1,44 +1,65 @@
 <?php
+/*
+|--------------------------------------------------------------------------
+| Production Batch Status Update
+|--------------------------------------------------------------------------
+| Обновляет статус batch
+| batch_id принимается БЕЗ префикса batch_
+|--------------------------------------------------------------------------
+*/
+
 header('Content-Type: application/json; charset=utf-8');
 
-$batchId = basename($_GET['batch_id'] ?? '');
+$batchId = $_POST['batch_id'] ?? null;
+$status  = $_POST['status'] ?? null;
 
-if (!$batchId) {
-    http_response_code(400);
-    echo json_encode(["error" => "batch_id required"]);
+if (!$batchId || !$status) {
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'batch_id and status are required'
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-$file = __DIR__ . "/production_batches/$batchId.production.json";
+$dir = __DIR__ . '/logs';
+$file = $dir . '/batch_' . basename($batchId) . '.json';
 
 if (!file_exists($file)) {
     echo json_encode([
-        "status" => "ok",
-        "message" => "no production started",
-        "progress" => 0
-    ]);
+        'status' => 'error',
+        'message' => 'Batch not found'
+    ], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
 $data = json_decode(file_get_contents($file), true);
-$items = $data['items'] ?? [];
-
-$planned = 0;
-$produced = 0;
-
-foreach ($items as $item) {
-    $planned += $item['planned_quantity'];
-    $produced += $item['produced_quantity'];
+if (!$data) {
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'Invalid batch file'
+    ], JSON_UNESCAPED_UNICODE);
+    exit;
 }
 
-$progress = $planned > 0 ? round(($produced / $planned) * 100, 1) : 0;
+/*
+|--------------------------------------------------------------------------
+| Update status
+|--------------------------------------------------------------------------
+*/
+
+$data['status'] = $status;
+
+if ($status === 'taken') {
+    $data['taken_at'] = date('c');
+}
+
+file_put_contents(
+    $file,
+    json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
+);
 
 echo json_encode([
-    "status" => "ok",
-    "batch_id" => $batchId,
-    "updated_at" => $data['updated_at'],
-    "planned_quantity" => $planned,
-    "produced_quantity" => $produced,
-    "progress_percent" => $progress,
-    "items" => array_values($items)
-], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    'status'    => 'ok',
+    'batch_id'  => $batchId,
+    'new_state' => $status
+], JSON_UNESCAPED_UNICODE);

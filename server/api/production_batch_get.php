@@ -9,9 +9,23 @@ if (!$batchId) {
     exit;
 }
 
-// защита + нормализация
+/*
+|--------------------------------------------------------------------------
+| Normalize batch_id
+|--------------------------------------------------------------------------
+| Принимаем:
+|   20251220-211608-6965
+|   batch_20251220-211608-6965
+|   batch_20251220-211608-6965.json
+|--------------------------------------------------------------------------
+*/
+
 $batchId = basename($batchId);
 $batchId = preg_replace('/\.json$/', '', $batchId);
+
+if (!str_starts_with($batchId, 'batch_')) {
+    $batchId = 'batch_' . $batchId;
+}
 
 $filename = __DIR__ . '/logs/' . $batchId . '.json';
 
@@ -74,7 +88,7 @@ ksort($byAccount);
 echo json_encode([
     "status" => "ok",
     "batch" => [
-        "batch_id" => $batchId,
+        "batch_id" => preg_replace('/^batch_/', '', $batchId),
         "batch_created_at" => $data["batch_created_at"] ?? null,
         "total_orders" => $data["total_orders"] ?? 0,
         "items_count" => count($items),
