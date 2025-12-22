@@ -1,134 +1,85 @@
 <?php
 header('Content-Type: text/html; charset=utf-8');
 
-/*
-|--------------------------------------------------------------------------
-| Production Dashboard
-|--------------------------------------------------------------------------
-| batch_id:
-|  - если передан → открываем конкретный batch
-|  - если нет → берём последний batch
-|--------------------------------------------------------------------------
-*/
+$dataDir = dirname(__DIR__) . '/data/items';
+$items = [];
 
-$batchId = $_GET['batch_id'] ?? null;
-
-$batchDir = __DIR__ . '/logs';
-$batchFile = null;
-
-// --------------------------------------------------
-// Если batch_id передан — используем его
-// --------------------------------------------------
-if ($batchId) {
-    $candidate = $batchDir . '/batch_' . basename($batchId) . '.json';
-    if (!file_exists($candidate)) {
-        die('Batch не найден: ' . htmlspecialchars($batchId));
-    }
-    $batchFile = $candidate;
+foreach (glob($dataDir . '/*.json') as $file) {
+    $items[] = json_decode(file_get_contents($file), true);
 }
 
-// --------------------------------------------------
-// Если batch_id НЕ передан — берём последний batch
-// --------------------------------------------------
-if (!$batchFile) {
-    $files = glob($batchDir . '/batch_*.json');
-    if (!$files) {
-        die('Нет доступных batch');
-    }
-
-    rsort($files, SORT_STRING); // самый новый — первый
-    $batchFile = $files[0];
+function group(array $items, string $status): array {
+    return array_filter($items, fn($i) => $i['status'] === $status);
 }
 
-// --------------------------------------------------
-// Загружаем batch
-// --------------------------------------------------
-$batchData = json_decode(file_get_contents($batchFile), true);
-if (!$batchData) {
-    die('Ошибка чтения batch');
-}
-
-$batchId   = $batchData['batch_id'];
-$items     = $batchData['items'] ?? [];
-
-// --------------------------------------------------
-// Группировка по категориям
-// --------------------------------------------------
-$byCategory = [];
-
-foreach ($items as $item) {
-    $cat = $item['category'] ?? 'Иное';
-    $byCategory[$cat][] = $item;
-}
+$groups = [
+    'Новые' => group($items, 'new'),
+    'Печать сегодня' => group($items, 'print_today'),
+    'Отложены' => group($items, 'delayed'),
+    'Готовы' => array_filter($items, fn($i) =>
+        in_array($i['status'], ['stock', 'printed'], true)
+    )
+];
 ?>
+
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
-<meta charset="UTF-8">
-<title>Производство — batch <?= htmlspecialchars($batchId) ?></title>
-<style>
-body {
-    font-family: Arial, sans-serif;
-    background: #f7f7f7;
-    margin: 20px;
-}
-.block {
-    background: #fff;
-    padding: 15px;
-    margin-bottom: 20px;
-    border-radius: 6px;
-}
-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-th, td {
-    padding: 6px 8px;
-    border-bottom: 1px solid #ddd;
-}
-th {
-    background: #eee;
-}
-.small {
-    font-size: 13px;
-    color: #666;
-}
-</style>
+    <meta charset="utf-8">
+    <title>Production Dashboard</title>
+    <style>
+        body { font-family: Arial; margin: 20px; }
+        h2 { margin-top: 40px; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ccc; padding: 6px; }
+        button { margin-right: 4px; }
+    </style>
 </head>
 <body>
 
-<h1>Производственный batch</h1>
+<h1>Производство — рабочий день</h1>
 
-<div class="block">
-    <strong>Batch ID:</strong> <?= htmlspecialchars($batchId) ?><br>
-    <strong>Создан:</strong> <?= htmlspecialchars($batchData['batch_created_at']) ?><br>
-    <strong>Заказов:</strong> <?= (int)$batchData['total_orders'] ?><br>
-    <strong>Статус:</strong> <?= htmlspecialchars($batchData['status']) ?>
-</div>
+<?php foreach ($groups as $title => $group): ?>
+<h2><?= htmlspecialchars($title) ?> (<?= count($group) ?>)</h2>
 
-<?php foreach ($byCategory as $cat => $rows): ?>
-<div class="block">
-    <h2><?= htmlspecialchars($cat) ?></h2>
-    <table>
-        <tr>
-            <th>Offer</th>
-            <th>Кол-во</th>
-            <th>Аккаунт</th>
-        </tr>
-        <?php foreach ($rows as $row): ?>
-        <tr>
-            <td><?= htmlspecialchars($row['offer_id']) ?></td>
-            <td><?= (int)$row['quantity'] ?></td>
-            <td><?= htmlspecialchars($row['account']) ?></td>
-        </tr>
+<table>
+<tr>
+    <th>Аккаунт</th>
+    <th>Posting</th>
+    <th>Offer</th>
+    <th>Категория</th>
+    <th>Статус</th>
+    <th>Действие</th>
+</tr>
+
+<?php foreach ($group as $item): ?>
+<tr>
+    <td><?= htmlspecialchars($item['account']) ?></td>
+    <td><?= htmlspecialchars($item['posting_number']) ?></td>
+    <td><?= htmlspecialchars($item['offer_id']) ?></td>
+    <td><?= htmlspecialchars($item['category']) ?></td>
+    <td><?= htmlspecialchars($item['status']) ?></td>
+    <td>
+        <?php foreach (['stock','print_today','delayed','printed'] as $st): ?>
+        <button onclick="updateStatus('<?= $item['item_id'] ?>','<?= $st ?>')">
+            <?= $st ?>
+        </button>
         <?php endforeach; ?>
-    </table>
-</div>
+    </td>
+</tr>
+<?php endforeach; ?>
+</table>
 <?php endforeach; ?>
 
-<div class="small">
-    <div>Открыт файл: <?= basename($batchFile) ?></div>
-</div>
+<script>
+function updateStatus(itemId, status) {
+    fetch('production_item_update.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({item_id: itemId, status: status})
+    }).then(() => location.reload());
+}
+</script>
 
 </body>
 </html>

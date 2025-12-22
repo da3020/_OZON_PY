@@ -1,76 +1,60 @@
 <?php
-/*
-|--------------------------------------------------------------------------
-| Production Item Update
-|--------------------------------------------------------------------------
-| Обновляет статус отдельного item в batch
-| batch_id принимается БЕЗ префикса
-|--------------------------------------------------------------------------
-*/
-
 header('Content-Type: application/json; charset=utf-8');
 
-$data = json_decode(file_get_contents('php://input'), true);
+$input = json_decode(file_get_contents('php://input'), true);
 
-if (!$data) {
+$itemId = $input['item_id'] ?? null;
+$newStatus = $input['status'] ?? null;
+
+if (!$itemId || !$newStatus) {
     http_response_code(400);
-    echo json_encode(['error' => 'Invalid JSON'], JSON_UNESCAPED_UNICODE);
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'item_id and status required'
+    ]);
     exit;
 }
 
-$batchId        = $data['batch_id'] ?? null;
-$postingNumber  = $data['posting_number'] ?? null;
-$offerId        = $data['offer_id'] ?? null;
-$newStatus      = $data['status'] ?? null;
+$allowedStatuses = [
+    'new',
+    'stock',
+    'print_today',
+    'delayed',
+    'printed'
+];
 
-if (!$batchId || !$postingNumber || !$offerId || !$newStatus) {
+if (!in_array($newStatus, $allowedStatuses, true)) {
     http_response_code(400);
-    echo json_encode(['error' => 'Missing required fields'], JSON_UNESCAPED_UNICODE);
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'invalid status'
+    ]);
     exit;
 }
 
-$file = __DIR__ . '/logs/batch_' . $batchId . '.json';
+$dataDir = dirname(__DIR__) . '/data/items';
+$file = $dataDir . '/' . $itemId . '.json';
 
 if (!file_exists($file)) {
     http_response_code(404);
-    echo json_encode(['error' => 'Batch not found'], JSON_UNESCAPED_UNICODE);
+    echo json_encode([
+        'status' => 'error',
+        'message' => 'item not found'
+    ]);
     exit;
 }
 
-$batch = json_decode(file_get_contents($file), true);
-if (!$batch) {
-    http_response_code(500);
-    echo json_encode(['error' => 'Corrupted batch file'], JSON_UNESCAPED_UNICODE);
-    exit;
-}
-
-$updated = false;
-
-foreach ($batch['items'] as &$item) {
-    if (
-        ($item['posting_number'] ?? null) === $postingNumber &&
-        ($item['offer_id'] ?? null) === $offerId
-    ) {
-        $item['status'] = $newStatus;
-        $item['updated_at'] = date('c');
-        $updated = true;
-        break;
-    }
-}
-
-if (!$updated) {
-    http_response_code(404);
-    echo json_encode(['error' => 'Item not found'], JSON_UNESCAPED_UNICODE);
-    exit;
-}
+$item = json_decode(file_get_contents($file), true);
+$item['status'] = $newStatus;
+$item['updated_at'] = date('c');
 
 file_put_contents(
     $file,
-    json_encode($batch, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
+    json_encode($item, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
 );
 
 echo json_encode([
-    'status'   => 'ok',
-    'batch_id' => $batchId,
-    'updated'  => true
-], JSON_UNESCAPED_UNICODE);
+    'status' => 'ok',
+    'item_id' => $itemId,
+    'new_status' => $newStatus
+]);
