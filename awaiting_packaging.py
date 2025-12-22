@@ -72,7 +72,6 @@ def main():
     all_rows = []
     batch_items = []
 
-    # ✅ FIX: batch_id формируется на стороне Python
     batch_id = (
         datetime.now().strftime("%Y%m%d-%H%M%S")
         + "-"
@@ -96,16 +95,21 @@ def main():
         postings = ozon_client.get_unfulfilled()
         print(f"Получено заказов: {len(postings)}")
 
-        # Собираем offer_id для обновления кэша категорий
+        # -----------------------------
+        # LOAD PRODUCT CATEGORIES
+        # -----------------------------
         offer_ids = set()
         for p in postings:
             for item in p.get("products", []):
                 if item.get("offer_id"):
                     offer_ids.add(item["offer_id"])
 
+        product_categories = {}
         if offer_ids:
             print(f"Обновление кэша категорий ({len(offer_ids)} товаров)")
-            product_client.get_categories_by_offer_ids(list(offer_ids))
+            product_categories = product_client.get_categories_by_offer_ids(
+                list(offer_ids)
+            )
 
         for p in postings:
             products = p.get("products", [])
@@ -113,7 +117,7 @@ def main():
 
             items_str = ", ".join(
                 f"{item.get('offer_id')} "
-                f"({map_category_name(item.get('description_category_id'), category_map, default_category)}) "
+                f"({map_category_name(product_categories.get(item.get('offer_id')), category_map, default_category)}) "
                 f"x{item.get('quantity')}"
                 for item in products
             )
@@ -128,14 +132,15 @@ def main():
             )
 
             for item in products:
+                offer_id = item.get("offer_id")
                 batch_items.append(
                     {
                         "account": acc["name"],
                         "posting_number": p.get("posting_number"),
-                        "offer_id": item.get("offer_id"),
+                        "offer_id": offer_id,
                         "quantity": item.get("quantity"),
                         "category": map_category_name(
-                            item.get("description_category_id"),
+                            product_categories.get(offer_id),
                             category_map,
                             default_category,
                         ),
@@ -143,7 +148,7 @@ def main():
                 )
 
     # -----------------------------
-    # DATAFRAME OUTPUT
+    # REPORTS
     # -----------------------------
     df = pd.DataFrame(all_rows)
 
@@ -169,10 +174,10 @@ def main():
     print(f"Excel-отчёт сохранён: {excel_path}")
 
     # -----------------------------
-    # SEND BATCH TO SERVER
+    # SEND BATCH
     # -----------------------------
     batch_payload = {
-        "batch_id": batch_id,               # ✅ FIX
+        "batch_id": batch_id,
         "batch_created_at": batch_created_at,
         "total_orders": len(df),
         "items": batch_items,
