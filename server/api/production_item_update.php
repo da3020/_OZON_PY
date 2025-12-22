@@ -1,60 +1,88 @@
 <?php
-header('Content-Type: application/json; charset=utf-8');
+header('Content-Type: application/json');
 
+$ROOT = dirname(__DIR__, 1);
+
+$ITEMS_DIR   = $ROOT . '/data/items';
+$HISTORY_DIR = $ROOT . '/data/history';
+
+if (!is_dir($HISTORY_DIR)) {
+    mkdir($HISTORY_DIR, 0777, true);
+}
+
+// -----------------------------
+// READ INPUT
+// -----------------------------
 $input = json_decode(file_get_contents('php://input'), true);
 
-$itemId = $input['item_id'] ?? null;
-$newStatus = $input['status'] ?? null;
-
-if (!$itemId || !$newStatus) {
+if (
+    !$input ||
+    empty($input['item_id']) ||
+    empty($input['status'])
+) {
     http_response_code(400);
     echo json_encode([
         'status' => 'error',
-        'message' => 'item_id and status required'
+        'message' => 'Invalid payload'
     ]);
     exit;
 }
 
-$allowedStatuses = [
-    'new',
-    'stock',
-    'print_today',
-    'delayed',
-    'printed'
-];
+$itemId    = basename($input['item_id']);
+$newStatus = $input['status'];
+$now       = date('c');
 
-if (!in_array($newStatus, $allowedStatuses, true)) {
-    http_response_code(400);
-    echo json_encode([
-        'status' => 'error',
-        'message' => 'invalid status'
-    ]);
-    exit;
-}
+$itemFile = $ITEMS_DIR . '/' . $itemId . '.json';
 
-$dataDir = dirname(__DIR__) . '/data/items';
-$file = $dataDir . '/' . $itemId . '.json';
-
-if (!file_exists($file)) {
+if (!file_exists($itemFile)) {
     http_response_code(404);
     echo json_encode([
         'status' => 'error',
-        'message' => 'item not found'
+        'message' => 'Item not found'
     ]);
     exit;
 }
 
-$item = json_decode(file_get_contents($file), true);
+// -----------------------------
+// LOAD ITEM
+// -----------------------------
+$item = json_decode(file_get_contents($itemFile), true);
+$oldStatus = $item['status'] ?? null;
+
+// -----------------------------
+// UPDATE ITEM
+// -----------------------------
 $item['status'] = $newStatus;
-$item['updated_at'] = date('c');
+$item['updated_at'] = $now;
 
 file_put_contents(
-    $file,
-    json_encode($item, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
+    $itemFile,
+    json_encode($item, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
 );
 
+// -----------------------------
+// WRITE HISTORY
+// -----------------------------
+$historyRecord = [
+    'item_id'    => $itemId,
+    'from'       => $oldStatus,
+    'to'         => $newStatus,
+    'changed_at' => $now
+];
+
+$historyFile = $HISTORY_DIR . '/' . $itemId . '_' . time() . '.json';
+
+file_put_contents(
+    $historyFile,
+    json_encode($historyRecord, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
+);
+
+// -----------------------------
+// RESPONSE
+// -----------------------------
 echo json_encode([
-    'status' => 'ok',
-    'item_id' => $itemId,
+    'status'     => 'ok',
+    'item_id'    => $itemId,
+    'old_status' => $oldStatus,
     'new_status' => $newStatus
 ]);
