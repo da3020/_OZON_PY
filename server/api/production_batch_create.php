@@ -3,7 +3,7 @@
 
 header('Content-Type: application/json');
 
-$ROOT = dirname(__DIR__, 2);
+$ROOT = dirname(__DIR__, 1);
 
 $LOG_DIR     = $ROOT . '/api/logs';
 $ITEMS_DIR   = $ROOT . '/data/items';
