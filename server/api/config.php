@@ -21,3 +21,4 @@ $apiPath = '/api';
 return [
     'api_base_url' => $scheme . '://' . $host . $apiPath,
 ];
+

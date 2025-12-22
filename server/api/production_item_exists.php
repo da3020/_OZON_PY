@@ -14,5 +14,6 @@ if ($itemId === '') {
 $file = $dataDir . '/' . $itemId . '.json';
 
 echo json_encode([
+    
     'exists' => file_exists($file)
 ]);
