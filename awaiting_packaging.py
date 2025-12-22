@@ -1,19 +1,16 @@
 import os
 import yaml
+import json
 import pandas as pd
 import requests
+import uuid
 
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 
 from ozon_client import OzonClient
 from ozon_product_client import OzonProductClient
-
 from utils.html_report import save_html_report
-from utils.product_cache import (
-    update_category_cache,
-    get_category_id_by_offer_id,
-)
 
 
 # -----------------------------
@@ -25,7 +22,7 @@ def load_accounts():
 
 
 def load_category_config():
-    with open("config/product_categories.yaml", encoding="utf-8") as f:
+    with open("config/product_categories.yaml", "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f) or {}
 
     return cfg.get("categories", {}), cfg.get("default", "Иное")
@@ -41,11 +38,14 @@ def map_category_name(category_id, category_map, default_name):
 # SERVER COMMUNICATION
 # -----------------------------
 def send_batch_to_server(batch_endpoint: str, payload: dict):
-    response = requests.post(
-        batch_endpoint,
-        json=payload,
-        timeout=20,
-    )
+    try:
+        response = requests.post(
+            batch_endpoint,
+            json=payload,
+            timeout=20,
+        )
+    except Exception as e:
+        raise RuntimeError(f"Ошибка соединения с сервером: {e}")
 
     if response.status_code != 200:
         raise RuntimeError(
@@ -72,6 +72,13 @@ def main():
     all_rows = []
     batch_items = []
 
+    # ✅ FIX: batch_id формируется на стороне Python
+    batch_id = (
+        datetime.now().strftime("%Y%m%d-%H%M%S")
+        + "-"
+        + uuid.uuid4().hex[:4]
+    )
+
     batch_created_at = datetime.now(timezone.utc).isoformat()
 
     for acc in accounts:
@@ -89,9 +96,7 @@ def main():
         postings = ozon_client.get_unfulfilled()
         print(f"Получено заказов: {len(postings)}")
 
-        # -----------------------------
-        # UPDATE CATEGORY CACHE
-        # -----------------------------
+        # Собираем offer_id для обновления кэша категорий
         offer_ids = set()
         for p in postings:
             for item in p.get("products", []):
@@ -100,19 +105,15 @@ def main():
 
         if offer_ids:
             print(f"Обновление кэша категорий ({len(offer_ids)} товаров)")
-            categories = product_client.get_categories_by_offer_ids(list(offer_ids))
-            update_category_cache(categories)
+            product_client.get_categories_by_offer_ids(list(offer_ids))
 
-        # -----------------------------
-        # PROCESS ORDERS
-        # -----------------------------
         for p in postings:
             products = p.get("products", [])
             order_date = p.get("in_process_at")
 
             items_str = ", ".join(
                 f"{item.get('offer_id')} "
-                f"({map_category_name(get_category_id_by_offer_id(item.get('offer_id')), category_map, default_category)}) "
+                f"({map_category_name(item.get('description_category_id'), category_map, default_category)}) "
                 f"x{item.get('quantity')}"
                 for item in products
             )
@@ -127,8 +128,6 @@ def main():
             )
 
             for item in products:
-                category_id = get_category_id_by_offer_id(item.get("offer_id"))
-
                 batch_items.append(
                     {
                         "account": acc["name"],
@@ -136,7 +135,7 @@ def main():
                         "offer_id": item.get("offer_id"),
                         "quantity": item.get("quantity"),
                         "category": map_category_name(
-                            category_id,
+                            item.get("description_category_id"),
                             category_map,
                             default_category,
                         ),
@@ -144,7 +143,7 @@ def main():
                 )
 
     # -----------------------------
-    # OUTPUT
+    # DATAFRAME OUTPUT
     # -----------------------------
     df = pd.DataFrame(all_rows)
 
@@ -170,9 +169,10 @@ def main():
     print(f"Excel-отчёт сохранён: {excel_path}")
 
     # -----------------------------
-    # SEND BATCH
+    # SEND BATCH TO SERVER
     # -----------------------------
     batch_payload = {
+        "batch_id": batch_id,               # ✅ FIX
         "batch_created_at": batch_created_at,
         "total_orders": len(df),
         "items": batch_items,
