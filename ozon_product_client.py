@@ -12,11 +12,8 @@ class OzonProductClient:
 
     def get_categories_by_offer_ids(self, offer_ids: list[str]) -> dict:
         """
-        Возвращает словарь:
+        Возвращает:
         { offer_id: description_category_id }
-
-        Используется offer_id (артикул продавца)
-        Батч-запросы до 1000 товаров
         """
         result = {}
         BATCH_SIZE = 1000
@@ -46,7 +43,7 @@ class OzonProductClient:
                 offer_id = item.get("offer_id")
                 category_id = item.get("description_category_id")
 
-                if offer_id and category_id:
+                if offer_id:
                     result[offer_id] = category_id
 
         return result

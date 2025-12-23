@@ -1,6 +1,5 @@
 import os
 import yaml
-import json
 import pandas as pd
 import requests
 import uuid
@@ -31,7 +30,10 @@ def load_category_config():
 def map_category_name(category_id, category_map, default_name):
     if category_id is None:
         return default_name
-    return category_map.get(int(category_id), default_name)
+    try:
+        return category_map.get(int(category_id), default_name)
+    except Exception:
+        return default_name
 
 
 # -----------------------------
@@ -96,7 +98,7 @@ def main():
         print(f"Получено заказов: {len(postings)}")
 
         # -----------------------------
-        # LOAD PRODUCT CATEGORIES
+        # COLLECT OFFER IDS
         # -----------------------------
         offer_ids = set()
         for p in postings:
@@ -104,20 +106,30 @@ def main():
                 if item.get("offer_id"):
                     offer_ids.add(item["offer_id"])
 
+        # -----------------------------
+        # LOAD CATEGORIES
+        # -----------------------------
         product_categories = {}
         if offer_ids:
-            print(f"Обновление кэша категорий ({len(offer_ids)} товаров)")
+            print(f"Загрузка информации о товарах ({len(offer_ids)})")
             product_categories = product_client.get_categories_by_offer_ids(
                 list(offer_ids)
             )
 
+        # -----------------------------
+        # PROCESS POSTINGS
+        # -----------------------------
         for p in postings:
             products = p.get("products", [])
             order_date = p.get("in_process_at")
 
             items_str = ", ".join(
                 f"{item.get('offer_id')} "
-                f"({map_category_name(product_categories.get(item.get('offer_id')), category_map, default_category)}) "
+                f"({map_category_name(
+                    product_categories.get(item.get('offer_id')),
+                    category_map,
+                    default_category
+                )}) "
                 f"x{item.get('quantity')}"
                 for item in products
             )
@@ -133,6 +145,7 @@ def main():
 
             for item in products:
                 offer_id = item.get("offer_id")
+
                 batch_items.append(
                     {
                         "account": acc["name"],
@@ -148,7 +161,7 @@ def main():
                 )
 
     # -----------------------------
-    # REPORTS
+    # DATAFRAME OUTPUT
     # -----------------------------
     df = pd.DataFrame(all_rows)
 
@@ -174,7 +187,7 @@ def main():
     print(f"Excel-отчёт сохранён: {excel_path}")
 
     # -----------------------------
-    # SEND BATCH
+    # SEND BATCH TO SERVER
     # -----------------------------
     batch_payload = {
         "batch_id": batch_id,
