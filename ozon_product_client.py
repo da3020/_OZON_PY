@@ -1,3 +1,5 @@
+# ozon_product_client.py
+
 import requests
 
 
@@ -10,11 +12,16 @@ class OzonProductClient:
         }
         self.url = "https://api-seller.ozon.ru/v3/product/info/list"
 
-    def get_categories_by_offer_ids(self, offer_ids: list[str]) -> dict:
+    def get_products_info_by_offer_ids(self, offer_ids: list[str]) -> dict:
         """
-        Возвращает:
-        { offer_id: description_category_id }
+        Возвращает словарь:
+        {
+            offer_id: { ... данные товара ... }
+        }
         """
+        if not offer_ids:
+            return {}
+
         result = {}
         BATCH_SIZE = 1000
 
@@ -41,9 +48,7 @@ class OzonProductClient:
 
             for item in items:
                 offer_id = item.get("offer_id")
-                category_id = item.get("description_category_id")
-
                 if offer_id:
-                    result[offer_id] = category_id
+                    result[offer_id] = item
 
         return result

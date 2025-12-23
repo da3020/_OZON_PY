@@ -1,4 +1,6 @@
 <?php
+// server/api/production_item_update.php
+
 header('Content-Type: application/json');
 
 $ROOT = dirname(__DIR__, 1);
@@ -8,7 +10,7 @@ $HISTORY_DIR = $ROOT . '/data/history';
 
 if (!is_dir($ITEMS_DIR) || !is_dir($HISTORY_DIR)) {
     http_response_code(500);
-    echo json_encode(['status' => 'error', 'message' => 'Storage not ready']);
+    echo json_encode(['status' => 'error', 'message' => 'Storage dirs missing']);
     exit;
 }
 
@@ -23,7 +25,7 @@ if (
     exit;
 }
 
-$itemId = $input['item_id'];
+$itemId = basename($input['item_id']); // защита
 $newStatus = $input['status'];
 $now = date('c');
 
@@ -36,6 +38,7 @@ if (!file_exists($itemFile)) {
 }
 
 $item = json_decode(file_get_contents($itemFile), true);
+
 $oldStatus = $item['status'] ?? null;
 
 $item['status'] = $newStatus;
@@ -47,22 +50,28 @@ file_put_contents(
 );
 
 // -----------------------------
-// HISTORY LOG
+// HISTORY
 // -----------------------------
-$history = [
-    'item_id'    => $itemId,
-    'from'       => $oldStatus,
-    'to'         => $newStatus,
-    'changed_at' => $now,
+$historyFile = $HISTORY_DIR . '/' . $itemId . '.json';
+
+$history = [];
+if (file_exists($historyFile)) {
+    $history = json_decode(file_get_contents($historyFile), true) ?: [];
+}
+
+$history[] = [
+    'from' => $oldStatus,
+    'to'   => $newStatus,
+    'at'   => $now,
 ];
 
 file_put_contents(
-    $HISTORY_DIR . '/' . $itemId . '_' . time() . '.json',
+    $historyFile,
     json_encode($history, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)
 );
 
 echo json_encode([
     'status' => 'ok',
-    'item'   => $itemId,
-    'new'    => $newStatus
+    'item_id' => $itemId,
+    'new_status' => $newStatus
 ]);

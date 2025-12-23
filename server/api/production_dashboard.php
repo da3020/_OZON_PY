@@ -1,134 +1,159 @@
 <?php
-$ROOT = dirname(__DIR__, 1);
+// production_dashboard.php
+
+$ROOT = __DIR__;
+
 $ITEMS_DIR = $ROOT . '/data/items';
 
 $items = [];
 
-foreach (glob($ITEMS_DIR . '/*.json') as $file) {
-    $items[] = json_decode(file_get_contents($file), true);
+if (is_dir($ITEMS_DIR)) {
+    foreach (glob($ITEMS_DIR . '/*.json') as $file) {
+        $data = json_decode(file_get_contents($file), true);
+        if ($data) {
+            $items[] = $data;
+        }
+    }
 }
 
-usort($items, fn($a, $b) => strcmp($a['created_at'], $b['created_at']));
+// сортировка по времени создания
+usort($items, function ($a, $b) {
+    return strcmp($a['created_at'] ?? '', $b['created_at'] ?? '');
+});
 ?>
 <!DOCTYPE html>
 <html lang="ru">
-
 <head>
-    <meta charset="UTF-8">
-    <title>Производство</title>
+<meta charset="UTF-8">
+<title>Production dashboard</title>
 
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f6f6f6;
-        }
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f5f5f5;
+}
 
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            background: #fff;
-        }
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+}
 
-        th,
-        td {
-            padding: 8px;
-            border: 1px solid #ddd;
-        }
+th, td {
+    padding: 8px;
+    border-bottom: 1px solid #ddd;
+    vertical-align: middle;
+    text-align: left;
+}
 
-        th {
-            background: #eee;
-        }
+th {
+    background: #eee;
+}
 
-        .status-new {
-            background: #eef;
-        }
+.item-image img {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+    border-radius: 4px;
+    background: #fff;
+}
 
-        .status-in_work {
-            background: #fff3cd;
-        }
+.status {
+    font-weight: bold;
+}
 
-        .status-ready {
-            background: #d4edda;
-        }
+.status-new { color: #444; }
+.status-printing { color: #0066cc; }
+.status-ready { color: #009933; }
+.status-hold { color: #cc0000; }
 
-        .status-delayed {
-            background: #f8d7da;
-        }
-
-        .status-done {
-            background: #e2e3e5;
-        }
-
-        button {
-            margin: 2px;
-            cursor: pointer;
-        }
-    </style>
+.actions button {
+    margin-right: 4px;
+    padding: 4px 8px;
+    cursor: pointer;
+}
+</style>
 </head>
 
 <body>
 
-    <h2>Производство — Items</h2>
+<h1>Производство</h1>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Offer</th>
-                <th>Категория</th>
-                <th>Кол-во</th>
-                <th>Статус</th>
-                <th>Действия</th>
-            </tr>
-        </thead>
+<table>
+<thead>
+<tr>
+    <th>Иконка</th>
+    <th>Аккаунт</th>
+    <th>Posting</th>
+    <th>Offer</th>
+    <th>Категория</th>
+    <th>Кол-во</th>
+    <th>Статус</th>
+    <th>Действия</th>
+</tr>
+</thead>
 
-        <tbody>
-            <?php foreach ($items as $item): ?>
-                <tr class="status-<?= htmlspecialchars($item['status']) ?>">
-                    <td><?= htmlspecialchars($item['offer_id']) ?></td>
-                    <td><?= htmlspecialchars($item['category']) ?></td>
-                    <td><?= htmlspecialchars($item['quantity']) ?></td>
-                    <td class="status-cell"><?= htmlspecialchars($item['status']) ?></td>
-                    <td>
-                        <?php foreach (['in_work', 'ready', 'delayed', 'done'] as $st): ?>
-                            <button onclick="updateStatus('<?= $item['item_id'] ?>','<?= $st ?>', this)">
-                                <?= $st ?>
-                            </button>
-                        <?php endforeach; ?>
-                    </td>
-                </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
+<tbody>
+<?php foreach ($items as $item): 
+    $itemId = $item['item_id'];
+    $status = $item['status'] ?? 'new';
+?>
+<tr data-item="<?= htmlspecialchars($itemId) ?>">
+    <td class="item-image">
+        <?php if (!empty($item['image_url'])): ?>
+            <img src="<?= htmlspecialchars($item['image_url']) ?>" loading="lazy">
+        <?php endif; ?>
+    </td>
 
-    <script>
-        function updateStatus(itemId, status, btn) {
-            fetch('./production_item_update.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        item_id: itemId,
-                        status: status
-                    })
-                })
-                .then(r => r.json())
-                .then(data => {
-                    if (data.status !== 'ok') {
-                        alert('Ошибка: ' + (data.message || 'unknown'));
-                        return;
-                    }
+    <td><?= htmlspecialchars($item['account'] ?? '') ?></td>
+    <td><?= htmlspecialchars($item['posting_number'] ?? '') ?></td>
+    <td><?= htmlspecialchars($item['offer_id'] ?? '') ?></td>
+    <td><?= htmlspecialchars($item['category'] ?? '') ?></td>
+    <td><?= htmlspecialchars($item['quantity'] ?? 1) ?></td>
 
-                    const row = btn.closest('tr');
-                    row.className = 'status-' + status;
-                    row.querySelector('.status-cell').innerText = status;
-                })
-                .catch(err => {
-                    alert('Ошибка запроса: ' + err);
-                });
+    <td class="status status-<?= htmlspecialchars($status) ?>">
+        <?= htmlspecialchars($status) ?>
+    </td>
+
+    <td class="actions">
+        <button onclick="updateStatus('<?= $itemId ?>','printing')">🖨 Печать</button>
+        <button onclick="updateStatus('<?= $itemId ?>','ready')">✅ Готово</button>
+        <button onclick="updateStatus('<?= $itemId ?>','hold')">⏸ Пауза</button>
+    </td>
+</tr>
+<?php endforeach; ?>
+</tbody>
+</table>
+
+<script>
+function updateStatus(itemId, status) {
+    fetch('/api/production_item_update.php', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            item_id: itemId,
+            status: status
+        })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status !== 'ok') {
+            alert(data.message || 'Ошибка');
+            return;
         }
-    </script>
+
+        const row = document.querySelector('[data-item="'+itemId+'"]');
+        const statusCell = row.querySelector('.status');
+
+        statusCell.textContent = status;
+        statusCell.className = 'status status-' + status;
+    })
+    .catch(err => {
+        alert('Ошибка связи с сервером');
+        console.error(err);
+    });
+}
+</script>
 
 </body>
-
 </html>

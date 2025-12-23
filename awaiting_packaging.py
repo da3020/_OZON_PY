@@ -1,5 +1,6 @@
 import os
 import yaml
+import json
 import pandas as pd
 import requests
 import uuid
@@ -30,10 +31,7 @@ def load_category_config():
 def map_category_name(category_id, category_map, default_name):
     if category_id is None:
         return default_name
-    try:
-        return category_map.get(int(category_id), default_name)
-    except Exception:
-        return default_name
+    return category_map.get(int(category_id), default_name)
 
 
 # -----------------------------
@@ -74,6 +72,7 @@ def main():
     all_rows = []
     batch_items = []
 
+    # batch_id формируется НА СТОРОНЕ PYTHON
     batch_id = (
         datetime.now().strftime("%Y%m%d-%H%M%S")
         + "-"
@@ -107,12 +106,12 @@ def main():
                     offer_ids.add(item["offer_id"])
 
         # -----------------------------
-        # LOAD CATEGORIES
+        # LOAD PRODUCT INFO (ICONS)
         # -----------------------------
-        product_categories = {}
+        product_info = {}
         if offer_ids:
             print(f"Загрузка информации о товарах ({len(offer_ids)})")
-            product_categories = product_client.get_categories_by_offer_ids(
+            product_info = product_client.get_products_info_by_offer_ids(
                 list(offer_ids)
             )
 
@@ -125,11 +124,7 @@ def main():
 
             items_str = ", ".join(
                 f"{item.get('offer_id')} "
-                f"({map_category_name(
-                    product_categories.get(item.get('offer_id')),
-                    category_map,
-                    default_category
-                )}) "
+                f"({map_category_name(item.get('description_category_id'), category_map, default_category)}) "
                 f"x{item.get('quantity')}"
                 for item in products
             )
@@ -146,17 +141,26 @@ def main():
             for item in products:
                 offer_id = item.get("offer_id")
 
+                info = product_info.get(offer_id, {})
+                if not isinstance(info, dict):
+                    info = {}
+
+                image_url = info.get("primary_image")
+
+                category_name = map_category_name(
+                    item.get("description_category_id"),
+                    category_map,
+                    default_category,
+                )
+
                 batch_items.append(
                     {
                         "account": acc["name"],
                         "posting_number": p.get("posting_number"),
                         "offer_id": offer_id,
-                        "quantity": item.get("quantity"),
-                        "category": map_category_name(
-                            product_categories.get(offer_id),
-                            category_map,
-                            default_category,
-                        ),
+                        "quantity": item.get("quantity", 1),
+                        "category": category_name,
+                        "image_url": image_url,
                     }
                 )
 
