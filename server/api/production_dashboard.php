@@ -8,10 +8,13 @@ $ITEMS_DIR = $ROOT . '/data/items';
 $items = [];
 
 if (is_dir($ITEMS_DIR)) {
-    foreach (glob($ITEMS_DIR . '/*.json') as $file) {
-        $data = json_decode(file_get_contents($file), true);
-        if ($data) {
-            $items[] = $data;
+    $dir = new DirectoryIterator($ITEMS_DIR);
+    foreach ($dir as $file) {
+        if ($file->isFile() && $file->getExtension() === 'json') {
+            $data = json_decode(file_get_contents($file->getPathname()), true);
+            if (is_array($data)) {
+                $items[] = $data;
+            }
         }
     }
 }
@@ -20,12 +23,10 @@ if (is_dir($ITEMS_DIR)) {
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Производство — дашборд</title>
+<title>Производство</title>
 
 <style>
-body {
-    font-family: Arial, sans-serif;
-}
+body { font-family: Arial, sans-serif; }
 
 table {
     border-collapse: collapse;
@@ -38,9 +39,7 @@ th, td {
     vertical-align: middle;
 }
 
-th {
-    background: #f5f5f5;
-}
+th { background: #f5f5f5; }
 
 img.icon {
     width: 48px;
@@ -53,10 +52,7 @@ img.icon {
 .status-ready { background: #d4edda; }
 .status-delayed { background: #f8d7da; }
 
-button {
-    margin-right: 4px;
-    cursor: pointer;
-}
+button { margin-right: 4px; cursor: pointer; }
 </style>
 </head>
 
@@ -73,6 +69,12 @@ button {
     <th>Действия</th>
 </tr>
 
+<?php if (empty($items)): ?>
+<tr>
+    <td colspan="5">Нет элементов</td>
+</tr>
+<?php endif; ?>
+
 <?php foreach ($items as $item): ?>
 <tr data-item-id="<?= htmlspecialchars($item['item_id']) ?>">
     <td>
@@ -80,8 +82,8 @@ button {
             <img class="icon" src="<?= htmlspecialchars($item['image_url']) ?>">
         <?php endif; ?>
     </td>
-    <td><?= htmlspecialchars($item['offer_id']) ?></td>
-    <td><?= htmlspecialchars($item['category'] ?? '—') ?></td>
+    <td><?= htmlspecialchars($item['offer_id'] ?? '') ?></td>
+    <td><?= htmlspecialchars($item['category'] ?? '') ?></td>
     <td class="status status-<?= htmlspecialchars($item['status']) ?>">
         <?= htmlspecialchars($item['status']) ?>
     </td>
@@ -100,15 +102,12 @@ function setStatus(itemId, status) {
     fetch('/api/production_item_update.php', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            item_id: itemId,
-            status: status
-        })
+        body: JSON.stringify({ item_id: itemId, status: status })
     })
     .then(r => r.json())
     .then(res => {
         if (res.status !== 'ok') {
-            alert('Ошибка обновления статуса');
+            alert('Ошибка');
             return;
         }
 
